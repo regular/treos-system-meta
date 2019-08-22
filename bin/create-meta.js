@@ -12,95 +12,123 @@ const pullSplit = require('pull-split')
 const {execFile} = require('child_process')
 const systemdboot = require('../systemd-boot')
 
-const kernelFiles = arr(argv.kernel)
-const cpioFiles = arr(argv.initcpio)
+let kernelFiles = arr(argv.kernel)
+let cpioFiles = arr(argv.initcpio)
+let bootConfig = argv['boot-config']
+let bootEntries = arr(argv['boot-entry'])
+
 const imageFiles = arr(argv['disk-image'])
 const shrinkwrapFile = argv.shrinkwrap
-const bootConfig = argv['boot-config']
-const bootEntries = arr(argv['boot-entry'])
 
-const files = kernelFiles.concat(cpioFiles).concat(imageFiles)
-if (shrinkwrapFile) files.push(shrinkwrapFile)
-
-getFileInfo(files, (err, info)=>{
-  if (err) return console.error(err.message)
-
-  const kernels = kernelFiles.reduce((a,p) =>{
-    const i = info[p]
-    a[basename(p)] = {
-      description: i.type,
-      size: i.stat.size,
-      checksum: i.sum
-    }
-    return a
-  }, {})
-
-  const initcpios = cpioFiles.reduce((a,p) =>{
-    const i = info[p]
-    a[basename(p)] = {
-      description: i.type,
-      size: i.stat.size,
-      checksum: i.sum
-    }
-    return a
-  }, {})
-
-  const diskImages = imageFiles.reduce((a,p) =>{
-    const i = info[p]
-    a[basename(p)] = {
-      description: i.type,
-      size: i.stat.size,
-      checksum: i.sum
-    }
-    return a
-  }, {})
-
-  let shrinkwrap = null
-
-  const done = multicb({pluck: 1})
-
-  handleBootEntries(bootEntries, done())
-
-  if (shrinkwrapFile) {
-    shrinkwrap = info[shrinkwrapFile].sum
-    const cb = done()
-    parseSkrinkwrapFile(shrinkwrapFile, (err, result) => {
-      if (err) return cb(err)
-      return cb(null, {packages: result})
-    })
-  }
-
-  if (bootConfig) {
-    const cb = done()
-    systemdboot.parseConfig(bootConfig, (err, result)=>{
-      if (err) return cb(err)
-      cb(null, {bootloader: {config: result}})
-    })
-  }
-  
-  done( (err, results)=>{
+const bootDir = argv['auto-detect']
+if (bootDir) {
+  systemdboot.autoDetect(bootDir, (err, result) => {
     if (err) {
       console.error(err.message)
       process.exit(1)
     }
-    results.unshift({
-      kernels,
-      initcpios,
-      diskImages,
-      shrinkwrap
-    })
-    const result = merge(...results)
-    console.log(JSON.stringify(result, null, 2))
+    if (!result) {
+      console.error('Failed to auto-detect boot entries')
+      process.exit(1)
+    }
+    bootConfig = result['boot-config']
+    bootEntries = bootEntries.concat(result['boot-entry'])
+    kernelFiles = kernelFiles.concat(result.kernel)
+    cpioFiles = cpioFiles.concat(result.initcpio)
+    doAll(kernelFiles, cpioFiles, bootConfig, bootEntries, imageFiles, shrinkwrapFile)
   })
-  
-})
+} else {
+  doAll(kernelFiles, cpioFiles, bootConfig, bootEntries, imageFiles, shrinkwrapFile)
+}
 
+function doAll(kernelFiles, cpioFiles, bootConfig, bootEntries, imageFiles, shrinkwrapFile) {
+  const files = kernelFiles.concat(cpioFiles).concat(imageFiles)
+  if (shrinkwrapFile) files.push(shrinkwrapFile)
+
+  getFileInfo(files, (err, info)=>{
+    if (err) return console.error(err.message)
+
+    const kernels = kernelFiles.reduce((a,p) =>{
+      const i = info[p]
+      a[basename(p)] = {
+        description: i.type,
+        size: i.stat.size,
+        checksum: i.sum
+      }
+      return a
+    }, {})
+
+    const initcpios = cpioFiles.reduce((a,p) =>{
+      const i = info[p]
+      a[basename(p)] = {
+        description: i.type,
+        size: i.stat.size,
+        checksum: i.sum
+      }
+      return a
+    }, {})
+
+    const diskImages = imageFiles.reduce((a,p) =>{
+      const i = info[p]
+      a[basename(p)] = {
+        description: i.type,
+        size: i.stat.size,
+        checksum: i.sum
+      }
+      return a
+    }, {})
+
+    let shrinkwrap = null
+
+    const done = multicb({pluck: 1})
+
+    handleBootEntries(bootEntries, done())
+
+    if (shrinkwrapFile) {
+      shrinkwrap = info[shrinkwrapFile].sum
+      const cb = done()
+      parseSkrinkwrapFile(shrinkwrapFile, (err, result) => {
+        if (err) return cb(err)
+        return cb(null, {packages: result})
+      })
+    }
+
+    if (bootConfig) {
+      const cb = done()
+      systemdboot.parseConfig(bootConfig, (err, result)=>{
+        if (err) return cb(err)
+        cb(null, {bootloader: {config: result}})
+      })
+    }
+    
+    done( (err, results)=>{
+      if (err) {
+        console.error(err.message)
+        process.exit(1)
+      }
+      results.unshift({
+        kernels,
+        initcpios,
+        diskImages,
+        shrinkwrap
+      })
+      const result = merge(...results)
+      console.log(JSON.stringify(result, null, 2))
+    })
+    
+  })
+}
 
 // -- util
 
 function handleBootEntries(bootEntries, cb) {
   systemdboot.parseEntries(bootEntries, (err, entries) => {
     if (err) return cb(err)
+    for(let entry of Object.values(entries)) {
+      if (entry.options && entry.options['tre-invite']) {
+        entry.options['tre-invite'] = '$TRE_INVITE'
+      }
+    }
     cb(null, {bootloader: {entries}})
   })
 }
