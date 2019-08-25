@@ -19,6 +19,7 @@ let bootEntries = arr(argv['boot-entry'])
 
 const imageFiles = arr(argv['disk-image'])
 const shrinkwrapFile = argv.shrinkwrap
+const includePaths = argv['include-paths']
 
 const bootDir = argv['auto-detect']
 if (bootDir) {
@@ -48,35 +49,20 @@ function doAll(kernelFiles, cpioFiles, bootConfig, bootEntries, imageFiles, shri
   getFileInfo(files, (err, info)=>{
     if (err) return console.error(err.message)
 
-    const kernels = kernelFiles.reduce((a,p) =>{
+    function fileReducer(a,p) {
       const i = info[p]
       a[basename(p)] = {
         description: i.type,
         size: i.stat.size,
-        checksum: i.sum
+        checksum: i.sum,
+        path: includePaths ? p : undefined
       }
       return a
-    }, {})
+    }
 
-    const initcpios = cpioFiles.reduce((a,p) =>{
-      const i = info[p]
-      a[basename(p)] = {
-        description: i.type,
-        size: i.stat.size,
-        checksum: i.sum
-      }
-      return a
-    }, {})
-
-    const diskImages = imageFiles.reduce((a,p) =>{
-      const i = info[p]
-      a[basename(p)] = {
-        description: i.type,
-        size: i.stat.size,
-        checksum: i.sum
-      }
-      return a
-    }, {})
+    const kernels = kernelFiles.reduce(fileReducer, {})
+    const initcpios = cpioFiles.reduce(fileReducer, {})
+    const diskImages = imageFiles.reduce(fileReducer, {})
 
     let shrinkwrap = null
 
@@ -85,7 +71,7 @@ function doAll(kernelFiles, cpioFiles, bootConfig, bootEntries, imageFiles, shri
     handleBootEntries(bootEntries, done())
 
     if (shrinkwrapFile) {
-      shrinkwrap = info[shrinkwrapFile].sum
+      shrinkwrap = Object.values([shrinkwrapFile].reduce(fileReducer, {}))[0]
       const cb = done()
       parseSkrinkwrapFile(shrinkwrapFile, (err, result) => {
         if (err) return cb(err)
