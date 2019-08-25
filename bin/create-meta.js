@@ -3,7 +3,7 @@ const fs = require('fs')
 const {join, resolve, basename} = require('path')
 const merge = require('lodash.merge')
 const multicb = require('multicb')
-const argv = require('minimist')(process.argv.slice(2))
+const argv = require('rc')('treos')
 
 const pull = require('pull-stream')
 const paramap = require('pull-paramap')
@@ -21,7 +21,7 @@ const imageFiles = arr(argv['disk-image'])
 const shrinkwrapFile = argv.shrinkwrap
 const includePaths = argv['include-paths']
 
-const bootDir = argv['auto-detect']
+const bootDir = argv['boot-dir']
 if (bootDir) {
   systemdboot.autoDetect(bootDir, (err, result) => {
     if (err) {
