@@ -20,6 +20,7 @@ let bootEntries = arr(argv['boot-entry'])
 const imageFiles = arr(argv['disk-image'])
 const shrinkwrapFile = argv.shrinkwrap
 const includePaths = argv['include-paths']
+const format = argv.format || 'json'
 
 const bootDir = argv['boot-dir']
 if (bootDir) {
@@ -98,7 +99,14 @@ function doAll(kernelFiles, cpioFiles, bootConfig, bootEntries, imageFiles, shri
         diskImages,
         shrinkwrap
       })
-      const result = merge(...results)
+      let result = merge(...results)
+      if (format == 'ssb') {
+        result = {
+          value: {
+            content: result
+          }
+        }
+      }
       console.log(JSON.stringify(result, null, 2))
     })
     
