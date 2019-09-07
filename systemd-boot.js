@@ -86,7 +86,7 @@ function readFile(file, cb) {
     pullSplit(),
     pull.filter(line=>line.trim()),
     pull.map(line => {
-      const [key, ...value] = line.trim().split(' ')
+      const [key, ...value] = line.trim().split(/\s+/)
       return {key, value: value.join(' ').trim()}
     }),
     pull.collect((err, kvs)=>{
