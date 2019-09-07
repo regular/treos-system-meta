@@ -100,6 +100,10 @@ function doAll(kernelFiles, cpioFiles, bootConfig, bootEntries, imageFiles, shri
         shrinkwrap
       })
       let result = merge(...results)
+      if (argv.bootloader) {
+        // override bootloader to de-expand variables
+        result.bootloader = argv.bootloader
+      }
       if (format == 'ssb') {
         result = {
           value: {
